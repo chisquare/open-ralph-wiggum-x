@@ -3,6 +3,16 @@
   <h3 align="center">Autonomous Agentic Loop for Claude Code, Codex, Copilot CLI & OpenCode</h3>
 </p>
 
+> **📌 本仓库说明**
+> 
+> 这是 [Th0rgal/open-ralph-wiggum](https://github.com/Th0rgal/open-ralph-wiggum) 的 fork 版本，用于添加自定义功能扩展。
+> 
+> **当前状态**: 保持与上游同步，准备添加新功能
+> 
+> **自定义功能**: 待开发（将在有具体代码后补充说明）
+> 
+> **上游同步**: 定期同步原项目更新，详见 [WORKFLOW.md](WORKFLOW.md)
+
 <p align="center">
   <img src="screenshot.webp" alt="Open Ralph Wiggum - Iterative AI coding loop for Claude Code and Codex" />
 </p>
