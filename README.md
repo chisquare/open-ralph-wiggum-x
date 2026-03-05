@@ -104,6 +104,7 @@ Switch between AI coding agents without changing your workflow:
 - **Self-Correcting Loops** — Agent sees its previous work and fixes its own mistakes
 - **Autonomous Execution** — Set it running and come back to finished code
 - **Task Tracking** — Built-in task management with `--tasks` mode
+- **Batch Task Execution** — Execute multiple tasks from `.ralph/tasks/` folder with priority-based scheduling
 - **Live Monitoring** — Check progress with `--status` from another terminal
 - **Mid-Loop Hints** — Inject guidance with `--add-context` without stopping
 
@@ -183,6 +184,9 @@ ralph "Create a small CLI and document usage. Output <promise>COMPLETE</promise>
 # Complex project with Tasks Mode
 ralph "Build a full-stack web application with user auth and database" \
   --tasks --max-iterations 50
+
+# Batch task execution (new feature)
+ralph --batch-tasks --max-iterations 10
 ```
 
 ## Environment Variables
@@ -213,6 +217,7 @@ Options:
   --abort-promise TEXT     Phrase that signals early abort (e.g., precondition failed)
   --tasks, -t              Enable Tasks Mode for structured task tracking
   --task-promise T         Text that signals task completion (default: READY_FOR_NEXT_TASK)
+  --batch-tasks            Execute tasks from .ralph/tasks/ folder (batch mode)
   --model MODEL            Model to use (agent-specific)
   --rotation LIST          Agent/model rotation for each iteration (comma-separated)
   --prompt-file, --file, -f  Read prompt content from a file
@@ -282,6 +287,49 @@ Example task file:
   - [ ] Add JWT handling
 - [ ] Build dashboard UI
 ```
+
+### Batch Task Mode
+
+Batch Task Mode allows you to execute multiple tasks from `.ralph/tasks/` folder automatically. Tasks are sorted by priority and executed one by one with full Ralph Loop support.
+
+```bash
+# Execute all tasks from .ralph/tasks/
+ralph --batch-tasks
+
+# With specific agent
+ralph --batch-tasks --agent claude-code
+
+# With iteration limit
+ralph --batch-tasks --max-iterations 10
+```
+
+#### How Batch Task Mode Works
+
+1. **Task Files**: Create task files in `.ralph/tasks/` folder (e.g., `[HIGH]-fix-bug.md`)
+2. **Priority Sorting**: Tasks are sorted by priority: `URGENT` > `HIGH` > `MEDIUM` > `LOW`
+3. **Serial Execution**: Each task is executed with full Ralph Loop iteration support
+4. **Auto Commit**: Completed tasks are automatically committed with task title
+5. **Archive**: Completed tasks are moved to `.ralph/tasks/completed/`
+
+#### Task File Format
+
+```markdown
+---
+priority: HIGH
+title: Fix authentication bug
+created_at: 2026-03-05
+---
+
+## Task Description
+Fix the login authentication issue where users cannot log in with valid credentials.
+
+## Acceptance Criteria
+- [ ] Login works with valid credentials
+- [ ] Proper error messages for invalid credentials
+- [ ] All existing tests pass
+```
+
+**Documentation**: See [Batch Tasks Documentation](docs/BATCH_TASKS.md) for detailed usage.
 
 ### Custom Prompt Templates
 
