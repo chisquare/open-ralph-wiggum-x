@@ -7,9 +7,10 @@
 > 
 > 这是 [Th0rgal/open-ralph-wiggum](https://github.com/Th0rgal/open-ralph-wiggum) 的 fork 版本，用于添加自定义功能扩展。
 > 
-> **当前状态**: 保持与上游同步，准备添加新功能
+> **当前状态**: 保持与上游同步，已添加批量任务执行功能
 > 
-> **自定义功能**: 待开发（将在有具体代码后补充说明）
+> **自定义功能**:
+> - 🚀 **批量任务执行器** - 自动执行 `.ralph/tasks/` 文件夹中的任务，支持优先级排序和完整 Ralph Loop 迭代。详见 [批量任务模式文档](docs/BATCH_TASKS.md)
 > 
 > **上游同步**: 定期同步原项目更新，详见 [WORKFLOW.md](WORKFLOW.md)
 
