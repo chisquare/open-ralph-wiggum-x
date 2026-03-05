@@ -7,7 +7,7 @@
  */
 
 import { $ } from "bun";
-import { existsSync, readFileSync, writeFileSync, mkdirSync, statSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, statSync, readdirSync, renameSync, unlinkSync } from "fs";
 import { join } from "path";
 import { checkTerminalPromise, stripAnsi, tasksMarkdownAllComplete } from "./completion";
 
@@ -293,6 +293,7 @@ Ralph Wiggum Loop - Iterative AI development with AI agents
 Usage:
   ralph "<prompt>" [options]
   ralph --prompt-file <path> [options]
+  ralph --batch-tasks [options]
 
 Arguments:
   prompt              Task description for the AI to work on
@@ -313,6 +314,7 @@ Options:
                       When used, --agent and --model are ignored
   --prompt-file, --file, -f  Read prompt content from a file
   --prompt-template PATH  Use custom prompt template (supports variables)
+  --batch-tasks       Execute tasks from .ralph/tasks/ folder (batch mode)
   --no-stream         Buffer agent output and print at the end
   --verbose-tools     Print every tool line (disable compact tool summary)
   --questions         Enable interactive question handling (default: enabled)
@@ -345,6 +347,16 @@ Examples:
   ralph --status                                        # Check loop status
   ralph --add-context "Focus on the auth module first"  # Add hint for next iteration
   ralph "Build API" -- --agent build                    # Pass flags to the agent
+  ralph --batch-tasks                                   # Execute tasks from .ralph/tasks/
+  ralph --batch-tasks --agent claude-code               # Batch tasks with specific agent
+
+Batch Tasks Mode:
+  Execute multiple tasks from .ralph/tasks/ folder:
+  1. Create task files in .ralph/tasks/ (e.g., [HIGH]-fix-bug.md)
+  2. Each file should have frontmatter with priority, title, created_at
+  3. Tasks are sorted by priority: URGENT > HIGH > MEDIUM > LOW
+  4. Completed tasks are moved to .ralph/tasks/completed/
+  5. Failed tasks stay in place for retry
 
 How it works:
   1. Sends your prompt to the selected AI agent
@@ -397,6 +409,56 @@ const EMPTY_HISTORY: RalphHistory = {
   struggleIndicators: { repeatedErrors: {}, noProgressIterations: 0, shortIterations: 0 }
 };
 
+type TaskPriority = 'URGENT' | 'HIGH' | 'MEDIUM' | 'LOW';
+
+interface TaskFrontmatter {
+  priority?: TaskPriority;
+  title?: string;
+  created_at?: string;
+}
+
+interface BatchTask {
+  filename: string;
+  path: string;
+  frontmatter: TaskFrontmatter;
+  content: string;
+  isCompleted: boolean;
+}
+
+interface TaskExecutionResult {
+  status: 'success' | 'failed';
+  startedAt: string;
+  endedAt: string;
+  durationMs: number;
+  iterations: number;
+  toolsUsed: Record<string, number>;
+  summary: string;
+  error?: string;
+}
+
+interface BatchTasksConfig {
+  tasksDir: string;
+  completedDir: string;
+}
+
+interface BatchTaskState {
+  active: boolean;
+  taskFilename: string;
+  taskIndex: number;
+  totalTasks: number;
+  iteration: number;
+  maxIterations: number;
+  minIterations: number;
+  startedAt: string;
+}
+
+const PRIORITY_ORDER: Record<TaskPriority, number> = {
+  'URGENT': 0,
+  'HIGH': 1,
+  'MEDIUM': 2,
+  'LOW': 3
+};
+
 // Load history
 function loadHistory(): RalphHistory {
   if (!existsSync(historyPath)) {
@@ -419,9 +481,587 @@ function saveHistory(history: RalphHistory): void {
 function clearHistory(): void {
   if (existsSync(historyPath)) {
     try {
-      require("fs").unlinkSync(historyPath);
+      unlinkSync(historyPath);
     } catch {}
   }
+}
+
+function getBatchTasksConfig(): BatchTasksConfig {
+  const tasksDir = join(stateDir, "tasks");
+  const completedDir = join(tasksDir, "completed");
+  return { tasksDir, completedDir };
+}
+
+const batchTaskStatePath = join(stateDir, "batch-task-state.json");
+
+function saveBatchTaskState(state: BatchTaskState): void {
+  if (!existsSync(stateDir)) {
+    mkdirSync(stateDir, { recursive: true });
+  }
+  writeFileSync(batchTaskStatePath, JSON.stringify(state, null, 2));
+}
+
+function loadBatchTaskState(): BatchTaskState | null {
+  if (!existsSync(batchTaskStatePath)) {
+    return null;
+  }
+  try {
+    return JSON.parse(readFileSync(batchTaskStatePath, "utf-8"));
+  } catch {
+    return null;
+  }
+}
+
+function clearBatchTaskState(): void {
+  if (existsSync(batchTaskStatePath)) {
+    try {
+      unlinkSync(batchTaskStatePath);
+    } catch {}
+  }
+}
+
+function createBatchTaskState(
+  task: BatchTask,
+  taskIndex: number,
+  totalTasks: number,
+  iteration: number
+): BatchTaskState {
+  return {
+    active: true,
+    taskFilename: task.filename,
+    taskIndex,
+    totalTasks,
+    iteration,
+    maxIterations,
+    minIterations,
+    startedAt: new Date().toISOString(),
+  };
+}
+
+function parseTaskFrontmatter(content: string): { 
+  frontmatter: TaskFrontmatter; 
+  body: string;
+} {
+  const frontmatterRegex = /^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/;
+  const match = content.match(frontmatterRegex);
+  
+  if (!match) {
+    return { frontmatter: {}, body: content };
+  }
+  
+  const frontmatterText = match[1];
+  const body = match[2];
+  const frontmatter: TaskFrontmatter = {};
+  
+  const lines = frontmatterText.split('\n');
+  for (const line of lines) {
+    const colonIndex = line.indexOf(':');
+    if (colonIndex === -1) continue;
+    
+    const key = line.substring(0, colonIndex).trim();
+    const value = line.substring(colonIndex + 1).trim();
+    
+    if (key === 'priority') {
+      const upperValue = value.toUpperCase();
+      if (['URGENT', 'HIGH', 'MEDIUM', 'LOW'].includes(upperValue)) {
+        frontmatter.priority = upperValue as TaskPriority;
+      }
+    } else if (key === 'title') {
+      frontmatter.title = value;
+    } else if (key === 'created_at') {
+      frontmatter.created_at = value;
+    }
+  }
+  
+  return { frontmatter, body };
+}
+
+function extractPriorityFromFilename(filename: string): TaskPriority | null {
+  const match = filename.match(/^\[([A-Z]+)\]/);
+  if (match && ['URGENT', 'HIGH', 'MEDIUM', 'LOW'].includes(match[1])) {
+    return match[1] as TaskPriority;
+  }
+  return null;
+}
+
+function scanTasksDir(tasksDir: string): BatchTask[] {
+  if (!existsSync(tasksDir)) {
+    return [];
+  }
+  
+  const tasks: BatchTask[] = [];
+  const files = readdirSync(tasksDir);
+  
+  for (const filename of files) {
+    if (!filename.endsWith('.md')) continue;
+    if (filename.startsWith('.')) continue;
+    
+    const filePath = join(tasksDir, filename);
+    const stat = statSync(filePath);
+    
+    if (!stat.isFile()) continue;
+    
+    const content = readFileSync(filePath, 'utf-8');
+    const { frontmatter, body } = parseTaskFrontmatter(content);
+    
+    if (!frontmatter.priority) {
+      const filePriority = extractPriorityFromFilename(filename);
+      if (filePriority) {
+        frontmatter.priority = filePriority;
+      }
+    }
+    
+    if (!frontmatter.title) {
+      let title = filename.replace(/\.md$/, '').replace(/^\[[A-Z]+\]\s*-?\s*/, '');
+      title = title.replace(/[-_]/g, ' ');
+      frontmatter.title = title;
+    }
+    
+    const isCompleted = body.includes('## 执行结果');
+    
+    tasks.push({
+      filename,
+      path: filePath,
+      frontmatter,
+      content: body,
+      isCompleted
+    });
+  }
+  
+  return tasks;
+}
+
+function sortTasksByPriority(tasks: BatchTask[]): BatchTask[] {
+  return tasks.sort((a, b) => {
+    const priorityA = a.frontmatter.priority || 'LOW';
+    const priorityB = b.frontmatter.priority || 'LOW';
+    
+    const orderA = PRIORITY_ORDER[priorityA];
+    const orderB = PRIORITY_ORDER[priorityB];
+    
+    if (orderA !== orderB) {
+      return orderA - orderB;
+    }
+    
+    if (a.frontmatter.created_at && b.frontmatter.created_at) {
+      return new Date(a.frontmatter.created_at).getTime() - new Date(b.frontmatter.created_at).getTime();
+    }
+    
+    if (a.frontmatter.created_at && !b.frontmatter.created_at) {
+      return -1;
+    }
+    if (!a.frontmatter.created_at && b.frontmatter.created_at) {
+      return 1;
+    }
+    
+    return a.filename.localeCompare(b.filename);
+  });
+}
+
+function formatExecutionResult(result: TaskExecutionResult): string {
+  const statusEmoji = result.status === 'success' ? '✅ 成功' : '❌ 失败';
+  const duration = formatDurationLong(result.durationMs);
+  
+  let output = `\n---\n## 执行结果\n\n`;
+  output += `- **状态**: ${statusEmoji}\n`;
+  output += `- **开始时间**: ${result.startedAt}\n`;
+  output += `- **结束时间**: ${result.endedAt}\n`;
+  output += `- **耗时**: ${duration}\n`;
+  output += `- **迭代次数**: ${result.iterations}\n`;
+  
+  if (Object.keys(result.toolsUsed).length > 0) {
+    output += `- **使用的工具**:\n`;
+    for (const [tool, count] of Object.entries(result.toolsUsed)) {
+      output += `  - ${tool}: ${count}\n`;
+    }
+  }
+  
+  output += `- **输出摘要**: ${result.summary}\n`;
+  
+  if (result.error) {
+    output += `- **错误信息**: ${result.error}\n`;
+  }
+  
+  return output;
+}
+
+function appendExecutionResult(taskPath: string, result: TaskExecutionResult): void {
+  const content = readFileSync(taskPath, 'utf-8');
+  const resultText = formatExecutionResult(result);
+  writeFileSync(taskPath, content + resultText);
+}
+
+function moveToCompleted(taskPath: string, completedDir: string): void {
+  if (!existsSync(completedDir)) {
+    mkdirSync(completedDir, { recursive: true });
+  }
+  
+  const filename = taskPath.split('/').pop() || taskPath.split('\\').pop() || 'task.md';
+  let destPath = join(completedDir, filename);
+  
+  if (existsSync(destPath)) {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+    const nameWithoutExt = filename.replace(/\.md$/, '');
+    destPath = join(completedDir, `${nameWithoutExt}-${timestamp}.md`);
+  }
+  
+  renameSync(taskPath, destPath);
+}
+
+const BATCH_TASK_COMPLETION_PROMISE = "batch-task-complete";
+
+function buildBatchTaskPrompt(
+  task: BatchTask,
+  taskIndex: number,
+  totalTasks: number,
+  iteration: number
+): string {
+  const priority = task.frontmatter.priority || 'LOW';
+  const title = task.frontmatter.title || task.filename;
+  
+  const context = loadContext();
+  const contextSection = context
+    ? `
+## Context (added by user)
+
+${context}
+
+---
+`
+    : "";
+  
+  return `
+# Batch Task - Task ${taskIndex} of ${totalTasks}
+
+You are executing a task from the batch task queue.
+Focus ONLY on this task. Do not modify other task files.
+
+## Task Source
+
+- **File**: ${task.filename}
+- **Priority**: ${priority}
+- **Title**: ${title}
+
+## Current Iteration: ${iteration}${maxIterations > 0 ? ` / ${maxIterations}` : ""}${minIterations > 1 ? ` (min: ${minIterations})` : ""}
+${contextSection}
+## Task Content
+
+${task.content.trim()}
+
+## Completion Requirements
+
+1. **Syntax Check**: Ensure code has no syntax errors
+2. **Runtime Verification**: Use available tools to verify no runtime errors
+3. **UI Verification** (if applicable): 
+   - Check for layout issues (pixel overflow, etc.)
+   - Verify UI matches expected layout
+
+## Rules
+
+- Focus only on this task
+- Do not modify other task files in .ralph/tasks/
+- Run tests/lint/typecheck if available
+- Verify your work before claiming completion
+- Do NOT lie or output false promises to exit
+
+## How to Complete
+
+When the task is GENUINELY COMPLETE, output:
+<promise>${BATCH_TASK_COMPLETION_PROMISE}</promise>
+
+Do NOT output this tag until ALL requirements are met.
+
+Now, work on the task. Good luck!
+`.trim();
+}
+
+async function executeSingleTask(
+  task: BatchTask,
+  agentConfig: AgentConfig,
+  taskIndex: number,
+  totalTasks: number
+): Promise<TaskExecutionResult> {
+  const startedAt = new Date();
+  let iteration = 0;
+  const toolsUsed: Record<string, number> = {};
+  let summary = '任务执行完成';
+  let errorMessage = '';
+  
+  const taskTitle = task.frontmatter.title || task.filename;
+  
+  while (true) {
+    iteration++;
+    
+    const state = loadBatchTaskState() || createBatchTaskState(task, taskIndex, totalTasks, iteration);
+    state.iteration = iteration;
+    saveBatchTaskState(state);
+    
+    const contextAtStart = loadContext();
+    
+    const taskPrompt = buildBatchTaskPrompt(task, taskIndex, totalTasks, iteration);
+    
+    let iterationError: string | null = null;
+    let iterationSuccess = false;
+    let iterationToolsUsed: Record<string, number> = {};
+    
+    try {
+      const cmdArgs = agentConfig.buildArgs(taskPrompt, model, {
+        allowAllPermissions,
+        extraFlags: extraAgentFlags,
+        streamOutput: true,
+      });
+      
+      const env = agentConfig.buildEnv({
+        filterPlugins: disablePlugins,
+        allowAllPermissions,
+      });
+      
+      const proc = Bun.spawn([agentConfig.command, ...cmdArgs], {
+        cwd: process.cwd(),
+        env,
+        stdin: "inherit",
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      
+      const iterationStart = Date.now();
+      const streamed = await streamProcessOutput(proc, {
+        compactTools: !verboseTools,
+        toolSummaryIntervalMs: 3000,
+        heartbeatIntervalMs: 10000,
+        iterationStart,
+        agent: agentConfig,
+      });
+      
+      const exitCode = await proc.exited;
+      
+      for (const [tool, count] of streamed.toolCounts) {
+        iterationToolsUsed[tool] = count;
+        toolsUsed[tool] = (toolsUsed[tool] || 0) + count;
+      }
+      
+      const hasCompletionPromise = streamed.stdoutText.includes(`<promise>${BATCH_TASK_COMPLETION_PROMISE}</promise>`);
+      
+      if (handleQuestions) {
+        const combinedOutput = `${streamed.stdoutText}\n${streamed.stderrText}`;
+        const detectedQuestion = detectQuestionTool(combinedOutput, agentConfig);
+        if (detectedQuestion) {
+          console.log(`\n🤔 Agent asked a question. Pausing to get your answer...`);
+          const answer = await promptUser(detectedQuestion);
+          if (answer.trim()) {
+            savePendingQuestion(answer);
+            if (!existsSync(stateDir)) {
+              mkdirSync(stateDir, { recursive: true });
+            }
+            const existingContext = loadContext() || "";
+            const answerContext = `\n## Previous Answer\nYour previous answer was: ${answer}\n`;
+            if (existingContext) {
+              writeFileSync(contextPath, existingContext + answerContext);
+            } else {
+              writeFileSync(contextPath, `# Ralph Loop Context\n${answerContext}`);
+            }
+            console.log(`✅ Answer saved and injected into context`);
+          } else {
+            console.log(`ℹ️  No answer provided, continuing without user input`);
+          }
+        } else {
+          const pendingAnswer = getAndClearPendingQuestion();
+          if (pendingAnswer) {
+            if (!existsSync(stateDir)) {
+              mkdirSync(stateDir, { recursive: true });
+            }
+            const existingContext = loadContext() || "";
+            const answerContext = `\n## Previous Answer\nYour previous answer was: ${pendingAnswer}\n`;
+            if (existingContext) {
+              writeFileSync(contextPath, existingContext + answerContext);
+            } else {
+              writeFileSync(contextPath, `# Ralph Loop Context\n${answerContext}`);
+            }
+          }
+        }
+      }
+      
+      if (hasCompletionPromise && exitCode === 0) {
+        if (iteration < minIterations) {
+          console.log(`\n⏳ Completion detected, but minimum iterations (${minIterations}) not reached.`);
+          console.log(`   Continuing to iteration ${iteration + 1}...`);
+        } else {
+          iterationSuccess = true;
+        }
+      } else if (exitCode !== 0) {
+        iterationError = `Agent exited with code ${exitCode}`;
+        console.warn(`\n⚠️  Iteration ${iteration} failed: ${iterationError}`);
+      } else if (!hasCompletionPromise) {
+        console.log(`\n🔄 Task not complete, continuing to iteration ${iteration + 1}...`);
+      }
+      
+      if (streamed.stderrText) {
+        const errorLines = streamed.stderrText.split('\n').filter(line => 
+          line.toLowerCase().includes('error') || 
+          line.toLowerCase().includes('failed')
+        );
+        if (errorLines.length > 0 && !iterationError) {
+          console.warn(`\n⚠️  Warnings in iteration ${iteration}:`);
+          errorLines.slice(0, 3).forEach(line => console.warn(`   ${line}`));
+        }
+      }
+      
+    } catch (error) {
+      iterationError = String(error);
+      console.error(`\n❌ Error in iteration ${iteration}:`, error);
+    }
+    
+    if (contextAtStart) {
+      console.log(`📝 Context was consumed this iteration`);
+      clearContext();
+    }
+    
+    if (iterationSuccess) {
+      console.log(`\n╔══════════════════════════════════════════════════════════════════╗`);
+      console.log(`║  ✅ Task completed in ${iteration} iteration(s)`);
+      console.log(`╚══════════════════════════════════════════════════════════════════╝`);
+      
+      clearBatchTaskState();
+      
+      if (autoCommit) {
+        try {
+          const cwd = process.cwd();
+          const status = await $`git status --porcelain`.cwd(cwd).text();
+          if (status.trim()) {
+            await $`git add -A`.cwd(cwd);
+            await $`git commit -m ${taskTitle}`.cwd(cwd).quiet();
+            console.log(`📝 Auto-committed changes for task: ${taskTitle}`);
+          }
+        } catch {
+          // Git commit failed, that's okay
+        }
+      }
+      
+      const endedAt = new Date();
+      return {
+        status: 'success',
+        startedAt: startedAt.toISOString(),
+        endedAt: endedAt.toISOString(),
+        durationMs: endedAt.getTime() - startedAt.getTime(),
+        iterations: iteration,
+        toolsUsed,
+        summary,
+      };
+    }
+    
+    if (maxIterations > 0 && iteration >= maxIterations) {
+      console.log(`\n╔══════════════════════════════════════════════════════════════════╗`);
+      console.log(`║  ❌ Reached max iterations (${maxIterations})`);
+      console.log(`╚══════════════════════════════════════════════════════════════════╝`);
+      
+      clearBatchTaskState();
+      
+      const endedAt = new Date();
+      return {
+        status: 'failed',
+        startedAt: startedAt.toISOString(),
+        endedAt: endedAt.toISOString(),
+        durationMs: endedAt.getTime() - startedAt.getTime(),
+        iterations: iteration,
+        toolsUsed,
+        summary: '达到最大迭代次数',
+        error: `Reached max iterations (${maxIterations})`,
+      };
+    }
+    
+    state.iteration = iteration + 1;
+    saveBatchTaskState(state);
+    
+    await new Promise(r => setTimeout(r, 1000));
+  }
+}
+
+async function runBatchTasks(config: BatchTasksConfig): Promise<void> {
+  const tasks = scanTasksDir(config.tasksDir);
+  const pendingTasks = tasks.filter(t => !t.isCompleted);
+  const sortedTasks = sortTasksByPriority(pendingTasks);
+  
+  if (sortedTasks.length === 0) {
+    console.log(`\n📋 没有待执行的任务`);
+    return;
+  }
+  
+  console.log(`\n╔══════════════════════════════════════════════════════════════════╗`);
+  console.log(`║                    Ralph Batch Tasks Mode                        ║`);
+  console.log(`╚══════════════════════════════════════════════════════════════════╝`);
+  console.log(`\n📋 发现 ${sortedTasks.length} 个待执行任务:\n`);
+  
+  sortedTasks.forEach((task, i) => {
+    const priority = task.frontmatter.priority || 'LOW';
+    const title = task.frontmatter.title || task.filename;
+    console.log(`  ${i + 1}. [${priority}] ${title}`);
+  });
+  
+  console.log(`\n开始执行任务...`);
+  console.log(`═`.repeat(68));
+  
+  let successCount = 0;
+  let failedCount = 0;
+  
+  const agentConfig = AGENTS[agentType];
+  
+  for (let i = 0; i < sortedTasks.length; i++) {
+    const task = sortedTasks[i];
+    const title = task.frontmatter.title || task.filename;
+    
+    console.log(`\n${'═'.repeat(68)}`);
+    console.log(`📝 执行任务 ${i + 1}/${sortedTasks.length}: ${title}`);
+    console.log(`   文件: ${task.filename}`);
+    console.log(`${'═'.repeat(68)}\n`);
+    
+    try {
+      const result = await executeSingleTask(task, agentConfig, i + 1, sortedTasks.length);
+      
+      appendExecutionResult(task.path, result);
+      
+      if (result.status === 'success') {
+        moveToCompleted(task.path, config.completedDir);
+        console.log(`\n✅ 任务完成，已移动到 completed/`);
+        successCount++;
+      } else {
+        console.log(`\n❌ 任务失败，保留在原位置`);
+        failedCount++;
+      }
+      
+    } catch (error) {
+      console.error(`\n❌ 执行出错:`, error);
+      
+      const errorResult: TaskExecutionResult = {
+        status: 'failed',
+        startedAt: new Date().toISOString(),
+        endedAt: new Date().toISOString(),
+        durationMs: 0,
+        iterations: 0,
+        toolsUsed: {},
+        summary: '任务执行异常',
+        error: String(error)
+      };
+      
+      try {
+        appendExecutionResult(task.path, errorResult);
+      } catch (appendError) {
+        console.error(`追加执行结果失败:`, appendError);
+      }
+      
+      failedCount++;
+    }
+    
+    if (i < sortedTasks.length - 1) {
+      console.log(`\n等待 2 秒后继续下一个任务...`);
+      await new Promise(r => setTimeout(r, 2000));
+    }
+  }
+  
+  console.log(`\n${'═'.repeat(68)}`);
+  console.log(`✨ 所有任务执行完毕！`);
+  console.log(`   成功: ${successCount}/${sortedTasks.length}`);
+  console.log(`   失败: ${failedCount}/${sortedTasks.length}`);
+  console.log(`${'═'.repeat(68)}\n`);
 }
 
 // Status command
@@ -593,7 +1233,7 @@ if (addContextIdx !== -1) {
 // Clear context command
 if (args.includes("--clear-context")) {
   if (existsSync(contextPath)) {
-    require("fs").unlinkSync(contextPath);
+    unlinkSync(contextPath);
     console.log(`✅ Context cleared`);
   } else {
     console.log(`ℹ️  No pending context to clear`);
@@ -841,6 +1481,7 @@ let streamOutput = true;
 let verboseTools = false;
 let promptSource = "";
 let handleQuestions = true;
+let batchTasksMode = false;
 
 const promptParts: string[] = [];
 let extraAgentFlags: string[] = [];
@@ -972,6 +1613,8 @@ for (let i = 0; i < args.length; i++) {
     handleQuestions = true;
   } else if (arg === "--no-questions") {
     handleQuestions = false;
+  } else if (arg === "--batch-tasks") {
+    batchTasksMode = true;
   } else if (arg.startsWith("-")) {
     console.error(`Error: Unknown option: ${arg}`);
     console.error("Run 'ralph --help' for available options");
@@ -1026,13 +1669,14 @@ if (promptFile) {
   prompt = promptParts.join(" ");
 }
 
-if (!prompt) {
+if (!prompt && !batchTasksMode) {
   const existingState = loadState();
   if (existingState?.active) {
     prompt = existingState.prompt;
   } else {
     console.error("Error: No prompt provided");
     console.error("Usage: ralph \"Your task description\" [options]");
+    console.error("       ralph --batch-tasks [options]");
     console.error("Run 'ralph --help' for more information");
     process.exit(1);
   }
@@ -1084,7 +1728,7 @@ function loadState(): RalphState | null {
 function clearState(): void {
   if (existsSync(statePath)) {
     try {
-      require("fs").unlinkSync(statePath);
+      unlinkSync(statePath);
     } catch {}
   }
 }
@@ -1178,7 +1822,7 @@ function loadContext(): string | null {
 function clearContext(): void {
   if (existsSync(contextPath)) {
     try {
-      require("fs").unlinkSync(contextPath);
+      unlinkSync(contextPath);
     } catch {}
   }
 }
@@ -1211,7 +1855,7 @@ function loadPendingQuestions(): PendingQuestion[] {
 function clearPendingQuestions(): void {
   if (existsSync(questionsPath)) {
     try {
-      require("fs").unlinkSync(questionsPath);
+      unlinkSync(questionsPath);
     } catch {}
   }
 }
@@ -2373,8 +3017,16 @@ async function runRalphLoop(): Promise<void> {
 }
 
 // Run the loop
-runRalphLoop().catch(error => {
-  console.error("Fatal error:", error);
-  clearState();
-  process.exit(1);
-});
+if (batchTasksMode) {
+  const config = getBatchTasksConfig();
+  runBatchTasks(config).catch(error => {
+    console.error("Fatal error:", error);
+    process.exit(1);
+  });
+} else {
+  runRalphLoop().catch(error => {
+    console.error("Fatal error:", error);
+    clearState();
+    process.exit(1);
+  });
+}

@@ -51,6 +51,74 @@ GitHub Actions (`.github/workflows/ci.yml`)：
 - **[测试指南](docs/TESTING.md)** - 测试框架、运行测试、最佳实践
 - **[常见任务](docs/TASKS.md)** - 添加代理、修改逻辑、调试、环境变量、项目结构
 - **[Git 工作流](WORKFLOW.md)** - 分支管理、提交规范、同步上游
+- **[批量任务模式](docs/BATCH_TASKS.md)** - 批量执行任务文档
+- **[自定义 Slash Commands](docs/SLASH_COMMANDS.md)** - 创建自定义命令
+
+---
+
+## 批量任务模式
+
+项目支持批量任务模式，可以自动执行 `.ralph/tasks/` 文件夹中的任务。
+
+### 使用方法
+
+```bash
+# 执行批量任务
+bun ralph.ts --batch-tasks
+
+# 指定代理
+bun ralph.ts --batch-tasks --agent claude-code
+```
+
+### 任务文档格式
+
+```markdown
+---
+priority: HIGH
+title: 任务标题
+created_at: 2026-03-05
+---
+
+## 任务描述
+[详细的任务描述]
+
+## 实施计划
+[具体的实施步骤]
+```
+
+### 创建任务
+
+使用 `/create-task` 命令（OpenCode TUI 中）：
+```
+/create-task 实现用户登录功能
+```
+
+---
+
+## 自定义 Slash Commands
+
+项目包含自定义的 OpenCode slash commands，位于 `.opencode/commands/`。
+
+### 可用命令
+
+- `/create-task` - 根据描述生成任务文档
+  - 自动调研项目代码
+  - 讨论技术方案
+  - 生成详细的实施计划
+  - 不包含具体代码
+
+### 创建新命令
+
+在 `.opencode/commands/` 中创建 `.md` 文件：
+
+```markdown
+---
+description: "命令描述"
+allowed-tools: ["read", "write", "bash"]
+---
+
+命令内容... $ARGUMENTS
+```
 
 ---
 
