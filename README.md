@@ -11,6 +11,7 @@
 > 
 > **Custom Features**:
 > - 🚀 **Batch Task Executor** - Automatically executes tasks from `.ralph/tasks/` folder with priority sorting and full Ralph Loop iterations. See [Batch Tasks Documentation](docs/BATCH_TASKS.md)
+> - 📝 **Custom Slash Commands** - Create reusable commands to automate common tasks. Includes `/create-task` for generating detailed task documents. See [Slash Commands Guide](docs/SLASH_COMMANDS.md)
 > 
 > **Upstream Sync**: Regularly synced with original project updates, see [WORKFLOW.md](WORKFLOW.md)
 

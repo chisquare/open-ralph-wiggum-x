@@ -1,207 +1,207 @@
-# 批量任务模式 (Batch Tasks Mode)
+# Batch Tasks Mode
 
-## 概述
+## Overview
 
-批量任务模式允许你将多个任务文档放在 `.ralph/tasks/` 文件夹中，程序会按照优先级顺序自动执行这些任务。
+Batch Tasks Mode allows you to place multiple task documents in the `.ralph/tasks/` folder, and the program will automatically execute these tasks in priority order.
 
-## 文件夹结构
+## Folder Structure
 
 ```
 .ralph/
-  tasks/                      # 任务文件夹
-    [HIGH]-task-name.md       # 高优先级任务
-    [MEDIUM]-task-name.md     # 中等优先级任务
-    [LOW]-task-name.md        # 低优先级任务
-    completed/                # 已完成的任务
-      [HIGH]-task-name.md     # 完成后移动到这里
+  tasks/                      # Tasks folder
+    [HIGH]-task-name.md       # High priority task
+    [MEDIUM]-task-name.md     # Medium priority task
+    [LOW]-task-name.md        # Low priority task
+    completed/                # Completed tasks
+      [HIGH]-task-name.md     # Moved here after completion
 ```
 
-## 任务文件格式
+## Task File Format
 
-任务文件使用 Markdown 格式，包含 YAML frontmatter：
+Task files use Markdown format with YAML frontmatter:
 
 ```markdown
 ---
 priority: HIGH
-title: 任务标题
+title: Task Title
 created_at: 2026-03-05
 ---
 
-## 任务描述
+## Task Description
 
-详细的任务描述内容...
+Detailed task description content...
 
-## 要求
+## Requirements
 
-- 要求 1
-- 要求 2
+- Requirement 1
+- Requirement 2
 ```
 
-### Frontmatter 字段
+### Frontmatter Fields
 
-- **priority**: 优先级，可选值：`URGENT`, `HIGH`, `MEDIUM`, `LOW`
-- **title**: 任务标题（可选，如果未提供会从文件名提取）
-- **created_at**: 创建时间（可选，格式：YYYY-MM-DD）
+- **priority**: Priority level, available values: `URGENT`, `HIGH`, `MEDIUM`, `LOW`
+- **title**: Task title (optional, extracted from filename if not provided)
+- **created_at**: Creation time (optional, format: YYYY-MM-DD)
 
-### 文件命名规范
+### File Naming Convention
 
-文件名格式：`[PRIORITY]-task-name.md`
+Filename format: `[PRIORITY]-task-name.md`
 
-示例：
+Examples:
 - `[URGENT]-fix-critical-bug.md`
 - `[HIGH]-implement-login.md`
 - `[MEDIUM]-update-docs.md`
 - `[LOW]-cleanup-code.md`
 
-## 使用方法
+## Usage
 
-### 1. 创建任务
+### 1. Create Tasks
 
-在 `.ralph/tasks/` 文件夹中创建任务文件：
+Create task files in the `.ralph/tasks/` folder:
 
 ```bash
-# 复制示例任务
+# Copy example tasks
 cp docs/tasks-example/*.md .ralph/tasks/
 
-# 或创建新任务
+# Or create new task
 cat > .ralph/tasks/[HIGH]-my-task.md << 'EOF'
 ---
 priority: HIGH
-title: 我的任务
+title: My Task
 created_at: 2026-03-05
 ---
 
-## 任务描述
-请实现某个功能...
+## Task Description
+Please implement a certain feature...
 EOF
 ```
 
-### 2. 执行批量任务
+### 2. Execute Batch Tasks
 
 ```bash
-# 基本用法
+# Basic usage
 bun ralph.ts --batch-tasks
 
-# 指定代理
+# Specify agent
 bun ralph.ts --batch-tasks --agent claude-code
 
-# 指定模型
+# Specify model
 bun ralph.ts --batch-tasks --model claude-sonnet-4
 
-# 组合其他参数
+# Combine with other parameters
 bun ralph.ts --batch-tasks --no-commit --verbose-tools
 ```
 
-### 3. 查看执行结果
+### 3. View Execution Results
 
-执行完成后：
-- 成功的任务会移动到 `.ralph/tasks/completed/` 文件夹
-- 失败的任务保留在原位置，并在文件末尾追加执行结果
+After execution:
+- Successful tasks are moved to `.ralph/tasks/completed/` folder
+- Failed tasks remain in place with execution results appended
 
-## 执行顺序
+## Execution Order
 
-任务按以下顺序执行：
-1. 优先级：URGENT > HIGH > MEDIUM > LOW
-2. 同优先级按 `created_at` 升序排列
-3. 如果没有 `created_at`，按文件名排序
+Tasks are executed in the following order:
+1. Priority: URGENT > HIGH > MEDIUM > LOW
+2. Within same priority, sorted by `created_at` ascending
+3. If no `created_at`, sorted by filename
 
-## 执行结果
+## Execution Results
 
-每个任务执行后，会在文件末尾追加执行结果：
+After each task execution, results are appended to the end of the file:
 
 ```markdown
 ---
-## 执行结果
+## Execution Results
 
-- **状态**: ✅ 成功 / ❌ 失败
-- **开始时间**: 2026-03-05T10:30:00.000Z
-- **结束时间**: 2026-03-05T10:35:20.000Z
-- **耗时**: 5分20秒
-- **迭代次数**: 1
-- **使用的工具**:
+- **Status**: ✅ Success / ❌ Failed
+- **Start Time**: 2026-03-05T10:30:00.000Z
+- **End Time**: 2026-03-05T10:35:20.000Z
+- **Duration**: 5 minutes 20 seconds
+- **Iterations**: 1
+- **Tools Used**:
   - Read: 5
   - Write: 3
   - Bash: 8
-- **输出摘要**: 任务执行成功
+- **Output Summary**: Task executed successfully
 ```
 
-## 失败处理
+## Failure Handling
 
-如果任务执行失败：
-1. 文件保留在原位置（不移动到 completed 文件夹）
-2. 错误信息会追加到文件末尾
-3. 程序会继续执行下一个任务
+If task execution fails:
+1. File remains in place (not moved to completed folder)
+2. Error information is appended to the end of file
+3. Program continues to execute next task
 
-## 最佳实践
+## Best Practices
 
-1. **任务拆分**: 将大任务拆分为多个小任务，便于管理和重试
-2. **优先级设置**: 合理设置优先级，确保重要任务优先执行
-3. **描述清晰**: 在任务描述中提供详细的上下文和要求
-4. **定期清理**: 定期清理 completed 文件夹中的旧任务
+1. **Task Breakdown**: Split large tasks into smaller ones for easier management and retry
+2. **Priority Setting**: Set priorities reasonably to ensure important tasks execute first
+3. **Clear Descriptions**: Provide detailed context and requirements in task descriptions
+4. **Regular Cleanup**: Periodically clean old tasks in completed folder
 
-## 示例
+## Examples
 
-### 示例 1: 修复 Bug
+### Example 1: Fix Bug
 
 ```markdown
 ---
 priority: URGENT
-title: 修复生产环境登录失败问题
+title: Fix production login failure issue
 created_at: 2026-03-05
 ---
 
-## 问题描述
+## Problem Description
 
-生产环境中部分用户无法登录，报错信息：
+Some users cannot login in production environment, error message:
 ```
 Error: Invalid token
 ```
 
-## 复现步骤
+## Reproduction Steps
 
-1. 打开登录页面
-2. 输入用户名和密码
-3. 点击登录按钮
-4. 观察错误信息
+1. Open login page
+2. Enter username and password
+3. Click login button
+4. Observe error message
 
-## 要求
+## Requirements
 
-- 找出根本原因
-- 修复 bug
-- 添加相关测试
-- 更新 CHANGELOG
+- Find root cause
+- Fix bug
+- Add related tests
+- Update CHANGELOG
 ```
 
-### 示例 2: 添加功能
+### Example 2: Add Feature
 
 ```markdown
 ---
 priority: HIGH
-title: 实现用户头像上传功能
+title: Implement user avatar upload feature
 created_at: 2026-03-05
 ---
 
-## 任务描述
+## Task Description
 
-实现用户头像上传和显示功能。
+Implement user avatar upload and display functionality.
 
-## 功能要求
+## Feature Requirements
 
-- 支持上传 JPG、PNG 格式
-- 图片大小限制 2MB
-- 自动裁剪为正方形
-- 生成缩略图
+- Support JPG, PNG formats
+- Image size limit 2MB
+- Auto crop to square
+- Generate thumbnail
 
-## 技术要求
+## Technical Requirements
 
-- 使用 TypeScript
-- 添加单元测试
-- 添加 API 文档
+- Use TypeScript
+- Add unit tests
+- Add API documentation
 ```
 
-## 注意事项
+## Notes
 
-1. 批量任务模式会串行执行所有任务
-2. 每个任务执行完成后会等待 2 秒再执行下一个
-3. 可以随时使用 Ctrl+C 停止执行
-4. 已执行的任务（包含"执行结果"块）不会重复执行
+1. Batch task mode executes all tasks serially
+2. After each task completes, waits 2 seconds before executing next
+3. Can stop execution anytime with Ctrl+C
+4. Already executed tasks (containing "Execution Results" block) will not be re-executed
