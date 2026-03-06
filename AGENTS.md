@@ -47,10 +47,10 @@ GitHub Actions (`.github/workflows/ci.yml`)：
 
 ## 详细文档
 
-- **[代码风格指南](docs/CODE_STYLE.md)** - 导入顺序、类型定义、命名约定、错误处理、异步代码、格式化
-- **[测试指南](docs/TESTING.md)** - 测试框架、运行测试、最佳实践
-- **[常见任务](docs/TASKS.md)** - 添加代理、修改逻辑、调试、环境变量、项目结构
-- **[Git 工作流](WORKFLOW.md)** - 分支管理、提交规范、同步上游
+- **[代码风格指南](dev-docs/CODE_STYLE.md)** - 导入顺序、类型定义、命名约定、错误处理、异步代码、格式化
+- **[测试指南](dev-docs/TESTING.md)** - 测试框架、运行测试、最佳实践
+- **[常见任务](dev-docs/TASKS.md)** - 添加代理、修改逻辑、调试、环境变量、项目结构
+- **[Git 工作流](dev-docs/WORKFLOW.md)** - 分支管理、提交规范、同步上游
 - **[批量任务模式](docs/BATCH_TASKS.md)** - 批量执行任务文档
 - **[自定义 Slash Commands](docs/SLASH_COMMANDS.md)** - 创建自定义命令
 
