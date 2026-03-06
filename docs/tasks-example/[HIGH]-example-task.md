@@ -1,20 +1,20 @@
 ---
 priority: HIGH
-title: 示例任务 - 添加README文档
+title: Example Task - Add README Documentation
 created_at: 2026-03-05
 ---
 
-## 任务描述
+## Task Description
 
-这是一个示例批量任务文件，用于演示批量任务模式的功能。
+This is an example batch task file demonstrating the batch task mode functionality.
 
-请为项目添加一个简单的 README.md 文档，包括：
-- 项目名称和简介
-- 基本使用方法
-- 安装说明
+Please add a simple README.md document to the project, including:
+- Project name and description
+- Basic usage instructions
+- Installation guide
 
-## 要求
+## Requirements
 
-- 使用 Markdown 格式
-- 内容简洁明了
-- 包含代码示例
+- Use Markdown format
+- Keep content concise and clear
+- Include code examples

@@ -3,16 +3,16 @@
   <h3 align="center">Autonomous Agentic Loop for Claude Code, Codex, Copilot CLI & OpenCode</h3>
 </p>
 
-> **📌 本仓库说明**
+> **📌 Repository Note**
 > 
-> 这是 [Th0rgal/open-ralph-wiggum](https://github.com/Th0rgal/open-ralph-wiggum) 的 fork 版本，用于添加自定义功能扩展。
+> This is a fork of [Th0rgal/open-ralph-wiggum](https://github.com/Th0rgal/open-ralph-wiggum) with custom feature extensions.
 > 
-> **当前状态**: 保持与上游同步，已添加批量任务执行功能
+> **Current Status**: Synced with upstream, added batch task execution feature
 > 
-> **自定义功能**:
-> - 🚀 **批量任务执行器** - 自动执行 `.ralph/tasks/` 文件夹中的任务，支持优先级排序和完整 Ralph Loop 迭代。详见 [批量任务模式文档](docs/BATCH_TASKS.md)
+> **Custom Features**:
+> - 🚀 **Batch Task Executor** - Automatically executes tasks from `.ralph/tasks/` folder with priority sorting and full Ralph Loop iterations. See [Batch Tasks Documentation](docs/BATCH_TASKS.md)
 > 
-> **上游同步**: 定期同步原项目更新，详见 [WORKFLOW.md](WORKFLOW.md)
+> **Upstream Sync**: Regularly synced with original project updates, see [WORKFLOW.md](WORKFLOW.md)
 
 <p align="center">
   <img src="screenshot.webp" alt="Open Ralph Wiggum - Iterative AI coding loop for Claude Code and Codex" />

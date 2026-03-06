@@ -1,16 +1,16 @@
 ---
 priority: MEDIUM
-title: 示例任务 - 添加单元测试
+title: Example Task - Add Unit Tests
 created_at: 2026-03-05
 ---
 
-## 任务描述
+## Task Description
 
-这是一个中等优先级的示例任务。
+This is a medium-priority example task.
 
-请为项目的主要功能添加基本的单元测试框架。
+Please add a basic unit test framework for the project's main functionality.
 
-## 要求
+## Requirements
 
-- 使用项目现有的测试框架
-- 至少包含一个测试用例
+- Use the project's existing test framework
+- Include at least one test case

@@ -1,46 +1,46 @@
-# 批量任务示例文件
+# Batch Task Examples
 
-这个文件夹包含了批量任务模式的示例任务文件，用于演示如何创建和使用批量任务。
+This folder contains example task files for batch task mode, demonstrating how to create and use batch tasks.
 
-## 文件说明
+## File Descriptions
 
-- **[HIGH]-example-task.md** - 高优先级示例任务
-- **[MEDIUM]-example-test.md** - 中等优先级示例任务
-- **[LOW]-formatting.md** - 低优先级示例任务
+- **[HIGH]-example-task.md** - High priority example task
+- **[MEDIUM]-example-test.md** - Medium priority example task
+- **[LOW]-formatting.md** - Low priority example task
 
-## 使用方法
+## Usage
 
-要使用这些示例任务，可以将它们复制到 `.ralph/tasks/` 文件夹中：
+To use these example tasks, copy them to the `.ralph/tasks/` folder:
 
 ```bash
-# 复制示例任务到任务文件夹
+# Copy example tasks to task folder
 cp docs/tasks-example/*.md .ralph/tasks/
 
-# 执行批量任务
+# Execute batch tasks
 bun ralph.ts --batch-tasks
 ```
 
-## 创建自己的任务
+## Creating Your Own Tasks
 
-参考这些示例文件的格式创建你自己的任务：
+Create your own tasks using the format shown in these examples:
 
 ```markdown
 ---
 priority: HIGH
-title: 任务标题
+title: Task Title
 created_at: 2026-03-05
 ---
 
-## 任务描述
+## Task Description
 
-详细的任务描述...
+Detailed task description...
 
-## 要求
+## Requirements
 
-- 要求 1
-- 要求 2
+- Requirement 1
+- Requirement 2
 ```
 
-## 更多信息
+## More Information
 
-查看 [批量任务文档](../BATCH_TASKS.md) 了解更多详情。
+See [Batch Tasks Documentation](../BATCH_TASKS.md) for more details.

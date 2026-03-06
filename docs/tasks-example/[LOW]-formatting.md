@@ -1,11 +1,11 @@
 ---
 priority: LOW
-title: 示例任务 - 代码格式化
+title: Example Task - Code Formatting
 created_at: 2026-03-05
 ---
 
-## 任务描述
+## Task Description
 
-这是一个低优先级的示例任务。
+This is a low-priority example task.
 
-请检查并格式化项目中的代码文件，确保代码风格一致。
+Please check and format code files in the project to ensure consistent code style.
