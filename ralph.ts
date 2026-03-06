@@ -748,6 +748,30 @@ ${contextSection}
 
 ${task.content.trim()}
 
+## Before You Start
+
+**CRITICAL: Follow these steps BEFORE writing any code:**
+
+1. **Explore the Codebase**
+   - Read relevant source files to understand the project structure
+   - Identify existing implementations related to this task
+   - Check for similar patterns or utilities you can reuse
+
+2. **Check Current Progress**
+   - Look for partial implementations of this task
+   - Identify what has already been done
+   - Determine what still needs to be implemented
+
+3. **Understand Dependencies**
+   - Check related files and modules
+   - Understand how your changes will affect other parts
+   - Review any relevant tests or documentation
+
+**Do NOT start coding until you have a clear understanding of:**
+- The current state of the codebase
+- What has already been implemented
+- What specifically needs to be done for this task
+
 ## Completion Requirements
 
 1. **Syntax Check**: Ensure code has no syntax errors
